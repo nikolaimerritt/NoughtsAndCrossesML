@@ -1,64 +1,23 @@
-from board import emptyGrid
+from mathsyStuff import Transformation
+from board import Board
+
 """
-action: AMOUNT of rotation and transposition (pair of ints)
-motion: rotations composed with transpositions (function) of a given (r, c) pair
-motion on board: motion applied to whole board
+ -  a position on the board is modelled by a row vector, with the origin at the board's centre
+ -  there are 16 transformations on a board which preserve the boards layout (rotations, reflections, etc),
+    since there are 8 different ways an arrow (--->) along the board's top edge can end up,
+    and each can be composed with a swap of the players' symbols
+ -  these form a group
+ -  rotations by 0, 90, 180 and 270, a reflection by 45, the identity, and a piece swap,
+    belong to this group, so their compositions (which are 16 elements) 
+    make up the group
 """
-def encode(grid):
-    encoding = 0
-    for r in range(3): 
-        for c in range(3):
-            encoding += grid[r][c] * (3 ** (3 * r + c))
-    return encoding
+def standardTransformation(board, playerID):
+    swap = playerID != 1
+    minTrans = Transformation.identity()
 
-def compose(g, f):
-    return lambda x:    g(f(x))
-
-def identity(point):
-    return point
-
-def rotate90(point):
-    return (2 - point[1], point[0])
-
-def transpose(point):
-    return (point[1], point[0])
-
-def power(function, index):
-    if index == 0:
-        return identity
-    else:
-        return compose(function, power(function, index - 1))
-
-def motionOnPos(action):
-    rotations, transpositions = action
-    return compose(
-        power(rotate90, rotations), 
-        power(transpose, transpositions)
-    )
-
-def motionOnGrid(motion, grid):
-    movedGrid = emptyGrid()
-    for r in range(3):
-        for c in range(3):
-            movedR, movedC = motion((r, c))
-            movedGrid[r][c] = grid[movedR][movedC]
-    return movedGrid
-
-def actionOnGrid(action, grid):
-    return motionOnGrid(motionOnPos(action), grid)
-
-def standardisingAction(grid):
-    minEncoding = encode(grid)
-    minAction = (0, 0)
-    for r in [1, 2, 3]:
-        for t in [0, 1]:
-            if encode(actionOnGrid((r, t), grid)) < minEncoding:
-                minAction = (r, t)
-    return minAction
-
-def inverseAction(action):
-    rotations, transpositions = action
-    return (
-        (4 - rotations) % 4, 
-        (2 - transpositions) % 2
-    )
+    for angle in [0, 90, 180, 270]:
+        for reflectBy45 in [True, False]:
+            trans = Transformation.fromProperties(angle, reflectBy45, swap)
+            if trans.onBoard(board).encoding() < minTrans.onBoard(board).encoding():
+                minTrans = trans
+    return minTrans

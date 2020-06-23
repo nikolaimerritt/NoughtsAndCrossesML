@@ -1,62 +1,59 @@
 from util import before, after, between
-from board import Board
-import random
-from math import ceil
-from standardiser import *
+import random, math
+from mathsyStuff import pad
+from standardiser import standardTransformation
+
 
 class Choice:
     def __init__(self, encodingBeforeMove, priorChosen, playerID):
         self.encoding = encodingBeforeMove
         self.prior = priorChosen
         self.playerID = playerID
-
-
+    
+    def __str__(self):
+        return "{0} ({1}): {2}".format(self.encoding, self.playerID, str(self.prior))
+    
 class Prior:
-    def __init__(self, alpha, beta, pos):
+    def __init__(self, alpha, beta, coord):
         self.alpha = alpha
         self.beta = beta
-        self.pos = pos
+        self.coord = coord
     
     @classmethod
     def fromString(cls, string):
-        alpha, beta = [
-            float(x) for x in before(string, " (").split(", ")]
-        pos = [
-            int(x) for x in between(string, " (", ")").split(", ")]
+        alpha, beta = [float(x) for x in before(string, " (").split(", ")]
+        coord = [int(x) for x in between(string, " (", ")").split(", ")]
         
-        return cls(alpha, beta, pos)
+        return cls(alpha, beta, coord)
 
     def __str__(self):
         return "{0}, {1} ({2}, {3})".format(
             self.alpha,
             self.beta,
-            self.pos[0],
-            self.pos[1]
+            self.coord[0],
+            self.coord[1]
         )
     
     def mean(self):
         return self.alpha / (self.alpha + self.beta)
     
-    def update(self, datum, n):
-        return Prior(self.alpha + datum, self.beta + n - datum, self.pos)
+    def update(self, datum):
+        return Prior(self.alpha + datum, self.beta + 1 - datum, self.coord)
 
     def __eq__(self, other):
-        return self.alpha == other.alpha and self.beta == other.beta and self.pos == other.pos
+        return self.alpha == other.alpha and self.beta == other.beta and self.coord == other.coord
 
 class Learner:
-    maxIntensity = 5
-    whenToPlaySmart = 3 * 10 ** 4
-    saveInterval = 10 ** 2
+    possibleStdBoards = int((3 ** 9) / 8)
+    whenToPlaySmart = 20 * possibleStdBoards
+    whenToStop = 60 * possibleStdBoards
+    saveInterval = 100
     priorsFile = "priors.txt"
 
     def __init__(self):
         self.encodingToPriors = self.readPriors()
         self.amountOfData = self.readAmountOfData()
         self.movesMade = []
-
-    def printPriors(self):
-        for encoding, priors in self.encodingToPriors.items():
-            print()
 
     def readAmountOfData(self):
         """
@@ -70,7 +67,7 @@ class Learner:
         first line is amount of data, so is ignored
 
         lines are of format
-        13072: 0.5, 0.5; 0.2, 0.7; 1.2, 0.3
+        13072: <prior>; <prior>; <prior>
         """
         encodingToPriors = {}
         with open(Learner.priorsFile, "r") as f:
@@ -93,58 +90,67 @@ class Learner:
 
         return string 
     
-    def writePriors(self):
+    def writeData(self):
         with open(Learner.priorsFile, "w") as f:
             f.write(str(self.amountOfData) + "\n")
             f.write(self.priorsToString())
+
+    def choosePosition(self, board, playerID):
+        """
+            board 
+                |--(matrix)-->               stdBoard 
+                |--(choose best prior)-->    stdPos
+                |--(matrix^-1)-->            pos 
+        """
+
+        transToStd = standardTransformation(board, playerID)
+        stdBoard = transToStd.onBoard(board)
+        prior = self.choosePrior(stdBoard)
+        self.movesMade.append(Choice(stdBoard.encoding(), prior, playerID))
+        pos = transToStd.inverse().onCoord(prior.coord)
+        return pos
+    
+    def choosePrior(self, stdBoard):
+        encoding = stdBoard.encoding()
+
+        if encoding not in self.encodingToPriors.keys():
+            self.setUnbiasedPriors(stdBoard)
+
+        if self.amountOfData < self.whenToPlaySmart:
+            return random.choice(self.encodingToPriors[encoding])
+        else:
+            return self.bestPrior(self.encodingToPriors[encoding]) 
+    
+    def setUnbiasedPriors(self, board):
+        priors = [Prior(0.5, 0.5, coord) for coord in board.availableCoords()]
+        self.encodingToPriors[board.encoding()] = priors
 
     def bestPrior(self, priors):
         bestPrior = priors[0]
         for prior in priors[1 : ]:
             if prior.mean() > bestPrior.mean():
                 bestPrior = prior
+        return bestPrior
 
-    def choosePositionRandomly(self, board):
-        return random.choice(board.availablePositions())
-
-    def choosePosition(self, board, playerID):
-        action = standardisingAction(board.grid)
-        stdGrid = actionOnGrid(action, board.grid)
-        stdEncoding = encode(stdGrid)
-
-        prior = self.choosePrior(stdGrid, stdEncoding)
-        self.movesMade.append(Choice(stdEncoding, prior, playerID))
-        pos = motionOnPos(inverseAction(action))(prior.pos)
-        return pos
-
-    def addUnbiasedPriors(self, stdGrid, stdEncoding):
-        stdPositions = Board(stdGrid).availablePositions()
-        priors = []
-        for stdPos in stdPositions:
-            priors.append(Prior(0.5, 0.5, stdPos))
-        self.encodingToPriors[stdEncoding] = priors 
-
-    def choosePrior(self, stdGrid, stdEncoding):
-        if stdEncoding not in self.encodingToPriors.keys():
-            self.addUnbiasedPriors(stdGrid, stdEncoding)
-
-        if self.amountOfData >= Learner.whenToPlaySmart:
-            priors = self.encodingToPriors[stdEncoding]
-            return self.bestPrior(self.encodingToPriors[stdEncoding])
-        else:
-            return random.choice(self.encodingToPriors[stdEncoding])
-            
     def learnAfterGame(self, winners):
-        for i in range(len(self.movesMade)):
-            move = self.movesMade[i]
-            datum = 1 if move.playerID in winners else 0
-            intensity = ceil(Learner.maxIntensity * i / len(self.movesMade))
+        for choice in self.movesMade:
+            datum = 1 if choice.playerID in winners else 0
 
-            priors = self.encodingToPriors[move.encoding]
-            idx = priors.index(move.prior)
+            priors = self.encodingToPriors[choice.encoding]
+            idx = priors.index(choice.prior)
 
-            self.encodingToPriors[move.encoding][idx] = priors[idx].update(datum, intensity)
-            self.amountOfData += intensity
+            self.encodingToPriors[choice.encoding][idx] = priors[idx].update(datum)
+            self.amountOfData += 1
         self.movesMade = []
     
-
+    def printUncertainties(self, board, playerID):
+        transToStd = standardTransformation(board, playerID)
+        stdBoard = transToStd.onBoard(board)
+        for y in [1, 0, -1]:
+            for x in [-1, 0, 1]:
+                priors = [p for p in self.encodingToPriors[stdBoard.encoding()] if p.coord == (x, y)]
+                if priors == []:
+                    print("___", end = "  ")
+                else:
+                    print(pad(100 * priors[0].mean(), 3) + "%", end = "  ")
+        print()

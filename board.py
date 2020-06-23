@@ -1,15 +1,34 @@
+def coordToRowCol(coord):
+    """
+    centre of grid is origin
+    """
+    row = 1 - coord[1]
+    col = 1 + coord[0]
+    return row, col
+    
+def rowColToCoord(row, col):
+    """
+    centre of grid is origin
+    """
+    x = col - 1
+    y = 1 - row
+    return (x, y)
+
+def numberToCoord(n):
+    """
+    returns a number 0, ..., 8 to a coord on a 3x3 board
+    """
+    return rowColToCoord(int(n / 3), n - 3 * int(n / 3))
+
+
 def emptyGrid():
     return [
-            [0, 0, 0],
-            [0, 0, 0],
-            [0, 0, 0]
-        ]
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0]
+            ]
 
 class Board:
-    """ 
-    I have sacrified good design (checking if a move is valid, using functions in other functions, etc) for efficiency
-    """
-
     idToSymbol = {
         0:  " ",
         1:  "x",
@@ -25,29 +44,21 @@ class Board:
                 print("|" + Board.idToSymbol[self.grid[r][c]], end = "")
             print("|")
     
-    def availablePositions(self):
-        positions = []
+    def atCoord(self, coord):
+        r, c = coordToRowCol(coord)
+        return self.grid[r][c]
+
+    def availableCoords(self):
+        coords = []
         for r in range(3):
             for c in range(3):
                 if self.grid[r][c] == 0:
-                    positions.append((r, c))
-        return positions
-    
-    def swapIDs(self):
-        swappedIDsGrid = emptyGrid()
-        for r in range(3):
-            for c in range(3):
-                if self.grid[r][c] != 0:
-                    swappedIDsGrid[r][c] = 3 - self.grid[r][c]
-        return Board(swappedIDsGrid)
+                    coords.append(rowColToCoord(r, c))
+        return coords
 
     def isFull(self):
-        for r in range(3):
-            for c in range(3):
-                if self.grid[r][c] == 0:
-                    return False
-        return True
-    
+        return self.availableCoords() == []
+
     def isWinningBoard(self):
         # horizontal / vertical win
         for x in range(3):
@@ -66,6 +77,16 @@ class Board:
             if self.grid[0][2] == self.grid[1][1] == self.grid[2][0]:
                 return True
 
-    def makeMove(self, point, playerID):
-        self.grid[point[0]][point[1]] = playerID
+    def makeMove(self, coord, playerID):
+        r, c = coordToRowCol(coord)
+        if self.grid[r][c] != 0:
+            raise ValueError("Tried to erase someone's move")
+        self.grid[r][c] = playerID
     
+    def encoding(self):
+        encoding = 0
+        for r in range(3):
+            for c in range(3):
+                exponent = 3 * r + c
+                encoding += self.grid[r][c] * (3 ** exponent)
+        return encoding
