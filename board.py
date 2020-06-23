@@ -14,7 +14,7 @@ def rowColToCoord(row, col):
     y = 1 - row
     return (x, y)
 
-def numberToCoord(n):
+def cellNumberToCoord(n):
     """
     returns a number 0, ..., 8 to a coord on a 3x3 board
     """

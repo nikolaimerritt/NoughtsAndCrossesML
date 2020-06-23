@@ -1,6 +1,6 @@
 from util import before, after, between
 import random, math
-from mathsyStuff import pad
+from mathsyStuff import pad, elSuchThat
 from standardiser import standardTransformation
 
 
@@ -41,6 +41,8 @@ class Prior:
         return Prior(self.alpha + datum, self.beta + 1 - datum, self.coord)
 
     def __eq__(self, other):
+        if type(other) != Prior:
+            return False
         return self.alpha == other.alpha and self.beta == other.beta and self.coord == other.coord
 
 class Learner:
@@ -148,9 +150,10 @@ class Learner:
         stdBoard = transToStd.onBoard(board)
         for y in [1, 0, -1]:
             for x in [-1, 0, 1]:
-                priors = [p for p in self.encodingToPriors[stdBoard.encoding()] if p.coord == (x, y)]
-                if priors == []:
+                stdCoord = transToStd.onCoord((x, y))
+                prior = elSuchThat(self.encodingToPriors[stdBoard.encoding()], lambda p: p.coord == stdCoord)
+                if prior == None:
                     print("___", end = "  ")
                 else:
-                    print(pad(100 * priors[0].mean(), 3) + "%", end = "  ")
+                    print(pad(100 * prior.mean(), 2) + "%", end = "   ")
         print()

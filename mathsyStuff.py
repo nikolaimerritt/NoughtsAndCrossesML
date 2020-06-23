@@ -154,6 +154,10 @@ class Transformation:
         return Transformation(self.matrix.inverse(), self.swap)
 
 def pad(num, digits):
-    num = float(num)
-    amountOfZeroes = max(digits - len(str(num).replace(".", "")), 0)
-    return num + "0" * amountOfZeroes
+    numAsString = str(float(num))
+    amountOfZeroes = max(digits - len(numAsString.replace(".", "")), 0)
+    return numAsString[0 : digits] + "0" * amountOfZeroes
+
+def elSuchThat(list, condition):
+    elsThatMatchCondition = [x for x in list if condition(x)]
+    return elsThatMatchCondition[0] if elsThatMatchCondition else None
